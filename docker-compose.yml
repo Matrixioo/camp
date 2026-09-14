@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16
+    container_name: camp_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: camp
+      POSTGRES_USER: camp_user
+      POSTGRES_PASSWORD: camp_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - camp_pgdata:/var/lib/postgresql/data
+
+volumes:
+  camp_pgdata:
