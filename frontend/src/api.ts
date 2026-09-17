@@ -1,4 +1,5 @@
-import type { Board, FieldErrors, Reservation, ReservationInput, Unit } from './types';
+import { clearToken, getToken } from './auth';
+import type { Board, FieldErrors, Hotel, Membership, Reservation, ReservationInput, Role, Unit, User } from './types';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000/api';
 
@@ -14,10 +15,18 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = getToken();
   const response = await fetch(`${API_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Token ${token}` } : {}),
+    },
     ...options,
   });
+
+  if (response.status === 401) {
+    clearToken();
+  }
 
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
@@ -31,19 +40,65 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+export interface Session {
+  token: string;
+  user: User;
+  memberships: Membership[];
+}
+
+export function register(username: string, email: string, password: string): Promise<Session> {
+  return request<Session>('/auth/register/', { method: 'POST', body: JSON.stringify({ username, email, password }) });
+}
+
+export function login(username: string, password: string): Promise<Session> {
+  return request<Session>('/auth/login/', { method: 'POST', body: JSON.stringify({ username, password }) });
+}
+
+export function logout(): Promise<void> {
+  return request<void>('/auth/logout/', { method: 'POST' });
+}
+
+export function fetchMe(): Promise<{ user: User; memberships: Membership[] }> {
+  return request('/auth/me/');
+}
+
+export function fetchHotels(): Promise<Hotel[]> {
+  return request<Hotel[]>('/hotels/');
+}
+
+export function createHotel(name: string): Promise<Hotel> {
+  return request<Hotel>('/hotels/', { method: 'POST', body: JSON.stringify({ name }) });
+}
+
+export function deleteHotel(id: number): Promise<void> {
+  return request<void>(`/hotels/${id}/`, { method: 'DELETE' });
+}
+
+export function fetchMembers(hotelId: number): Promise<Membership[]> {
+  return request<Membership[]>(`/members/?hotel=${hotelId}`);
+}
+
+export function addMember(hotelId: number, email: string, role: Role): Promise<Membership> {
+  return request<Membership>('/members/', { method: 'POST', body: JSON.stringify({ hotel: hotelId, email, role }) });
+}
+
+export function removeMember(membershipId: number): Promise<void> {
+  return request<void>(`/members/${membershipId}/`, { method: 'DELETE' });
+}
+
 export function fetchBoards(): Promise<Board[]> {
   return request<Board[]>('/boards/');
 }
 
-export function createBoard(name: string): Promise<Board> {
-  return request<Board>('/boards/', { method: 'POST', body: JSON.stringify({ name }) });
+export function createBoard(hotelId: number, name: string): Promise<Board> {
+  return request<Board>('/boards/', { method: 'POST', body: JSON.stringify({ hotel: hotelId, name }) });
 }
 
 export function deleteBoard(id: number): Promise<void> {
   return request<void>(`/boards/${id}/`, { method: 'DELETE' });
 }
 
-export function updateBoard(id: number, payload: Partial<Omit<Board, 'id' | 'created_at'>>): Promise<Board> {
+export function updateBoard(id: number, payload: Partial<Omit<Board, 'id' | 'hotel' | 'created_at'>>): Promise<Board> {
   return request<Board>(`/boards/${id}/`, { method: 'PATCH', body: JSON.stringify(payload) });
 }
 

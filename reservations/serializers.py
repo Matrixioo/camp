@@ -6,8 +6,8 @@ from .models import Board, Guest, Reservation, Unit, reservation_overlaps
 class BoardSerializer(serializers.ModelSerializer):
     class Meta:
         model = Board
-        fields = ['id', 'name', 'order', 'default_check_in_time', 'default_check_out_time', 'created_at']
-        read_only_fields = ['id', 'created_at']
+        fields = ['id', 'hotel', 'name', 'order', 'default_check_in_time', 'default_check_out_time', 'created_at']
+        read_only_fields = ['id', 'hotel', 'created_at']
 
 
 class UnitSerializer(serializers.ModelSerializer):
@@ -30,11 +30,13 @@ class GuestSerializer(serializers.ModelSerializer):
 
 
 def _lead_guest_name(obj):
-    first = obj.guests.first()
-    if not first:
-        return 'Guest'
-    name = f'{first.first_name} {first.last_name}'.strip()
-    return name or 'Guest'
+    for guest in obj.guests.all():
+        name = f'{guest.first_name} {guest.last_name}'.strip()
+        if name:
+            return name
+    if obj.contact_name:
+        return obj.contact_name
+    return 'Guest'
 
 
 class LinkedReservationSerializer(serializers.ModelSerializer):
@@ -60,7 +62,7 @@ class ReservationSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'board', 'unit', 'status', 'guests', 'lead_guest_name', 'date_from', 'date_to',
             'check_in_time', 'check_out_time',
-            'ref_number', 'agency',
+            'ref_number', 'agency', 'contact_name',
             'notes_general', 'notes_reception', 'notes_kitchen', 'notes_housekeeping',
             'notes_system', 'notes_parking',
             'requested_category', 'linked_reservations', 'created_at',

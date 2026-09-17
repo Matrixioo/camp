@@ -33,6 +33,7 @@ interface Props {
   windowStart: Date;
   totalDays: number;
   armedReservation: Reservation | null;
+  canManage: boolean;
   onPlaceArmed: (unit: Unit, date: Date) => void;
   onCreateReservation: (unit: Unit, dateFrom: Date, dateTo: Date) => void;
   onOpenReservation: (reservation: Reservation) => void;
@@ -82,6 +83,7 @@ export function Grid({
   windowStart,
   totalDays,
   armedReservation,
+  canManage,
   onPlaceArmed,
   onCreateReservation,
   onOpenReservation,
@@ -565,7 +567,7 @@ export function Grid({
                     </button>
                   </div>
                 </div>
-              ) : (
+              ) : canManage ? (
                 <button
                   type="button"
                   className="unit-label"
@@ -578,36 +580,43 @@ export function Grid({
                   <strong>{unit.name}</strong>
                   {unit.category && <span className="muted"> {unit.category}</span>}
                 </button>
+              ) : (
+                <span className="unit-label unit-label-readonly">
+                  <strong>{unit.name}</strong>
+                  {unit.category && <span className="muted"> {unit.category}</span>}
+                </span>
               )}
             </div>
           ))}
 
-          <div className="grid-label-cell add-unit-row">
-            {addingUnit ? (
-              <div className="add-unit-form">
-                <input
-                  autoFocus
-                  placeholder="Name"
-                  value={newUnitName}
-                  onChange={(e) => setNewUnitName(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && submitNewUnit()}
-                />
-                <input
-                  placeholder="Category"
-                  value={newUnitCategory}
-                  onChange={(e) => setNewUnitCategory(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && submitNewUnit()}
-                />
-                <button type="button" onClick={submitNewUnit}>
-                  Add
+          {canManage && (
+            <div className="grid-label-cell add-unit-row">
+              {addingUnit ? (
+                <div className="add-unit-form">
+                  <input
+                    autoFocus
+                    placeholder="Name"
+                    value={newUnitName}
+                    onChange={(e) => setNewUnitName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && submitNewUnit()}
+                  />
+                  <input
+                    placeholder="Category"
+                    value={newUnitCategory}
+                    onChange={(e) => setNewUnitCategory(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && submitNewUnit()}
+                  />
+                  <button type="button" onClick={submitNewUnit}>
+                    Add
+                  </button>
+                </div>
+              ) : (
+                <button type="button" className="link-button" onClick={() => setAddingUnit(true)}>
+                  + Add row
                 </button>
-              </div>
-            ) : (
-              <button type="button" className="link-button" onClick={() => setAddingUnit(true)}>
-                + Add row
-              </button>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="grid-scroll" ref={scrollRef} onWheel={handleWheel} onScroll={handleScroll}>

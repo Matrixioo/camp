@@ -55,5 +55,5 @@ CORS is already configured for the Vite dev server.
 - More advanced board/property settings
 - Multi-property support (managing several hotels in one account)
 - Availability view — free room counts by date/category
-- User accounts with roles (owner, admin, staff)
+- ~~User accounts with roles (owner, admin, staff)~~ ☑️
 - Full smart automation for creating/editing/deleting reservations via API requests

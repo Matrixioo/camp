@@ -1,5 +1,30 @@
+export type Role = 'owner' | 'admin' | 'staff';
+
+export interface User {
+  id: number;
+  username: string;
+  email: string;
+}
+
+export interface Membership {
+  id: number;
+  user: User;
+  hotel: number;
+  hotel_name: string;
+  role: Role;
+  created_at: string;
+}
+
+export interface Hotel {
+  id: number;
+  name: string;
+  role: Role | null;
+  created_at: string;
+}
+
 export interface Board {
   id: number;
+  hotel: number;
   name: string;
   order: number;
   default_check_in_time: string;
@@ -68,6 +93,7 @@ export interface Reservation {
   check_out_time: string | null;
   ref_number: string;
   agency: string;
+  contact_name: string;
   notes_general: string;
   notes_reception: string;
   notes_kitchen: string;

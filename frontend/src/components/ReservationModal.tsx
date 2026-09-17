@@ -11,8 +11,9 @@ import {
 } from '../api';
 import { CountryAutocomplete } from './CountryAutocomplete';
 import { ConfirmDialog } from './ConfirmDialog';
-import type { Board, DocumentType, FieldErrors, Guest, NotesCategory, Reservation, ReservationStatus, Unit } from '../types';
+import type { Board, DocumentType, FieldErrors, Guest, NotesCategory, Reservation, ReservationStatus, Role, Unit } from '../types';
 import { useBodyScrollLock } from '../useBodyScrollLock';
+import { flattenErrors } from '../errors';
 
 const NOTES_TABS: { key: NotesCategory; label: string }[] = [
   { key: 'notes_reception', label: 'Reception' },
@@ -50,6 +51,7 @@ interface Props {
   boards: Board[];
   units: Unit[];
   reservation: Reservation | null;
+  role: Role | null;
   initialUnitId: number | null;
   initialDateFrom: string;
   initialDateTo: string;
@@ -80,26 +82,12 @@ function emptyGuest(): Guest {
   };
 }
 
-function flattenErrors(value: unknown, prefix = ''): string[] {
-  if (typeof value === 'string') {
-    return [prefix ? `${prefix}: ${value}` : value];
-  }
-  if (Array.isArray(value)) {
-    return value.flatMap((item) => flattenErrors(item, prefix));
-  }
-  if (value && typeof value === 'object') {
-    return Object.entries(value as Record<string, unknown>).flatMap(([key, val]) =>
-      flattenErrors(val, key === 'non_field_errors' ? prefix : key),
-    );
-  }
-  return [];
-}
-
 export function ReservationModal({
   boardId,
   boards,
   units,
   reservation,
+  role,
   initialUnitId,
   initialDateFrom,
   initialDateTo,
@@ -128,6 +116,7 @@ export function ReservationModal({
   const [status, setStatus] = useState<ReservationStatus>(reservation?.status ?? 'confirmed');
   const [refNumber, setRefNumber] = useState(reservation?.ref_number ?? '');
   const [agency, setAgency] = useState(reservation?.agency ?? '');
+  const [contactName, setContactName] = useState(reservation?.contact_name ?? '');
   const [notesGeneral, setNotesGeneral] = useState(reservation?.notes_general ?? '');
   const [notesReception, setNotesReception] = useState(reservation?.notes_reception ?? '');
   const [notesKitchen, setNotesKitchen] = useState(reservation?.notes_kitchen ?? '');
@@ -206,6 +195,7 @@ export function ReservationModal({
       check_out_time: checkOutTime || null,
       ref_number: refNumber,
       agency,
+      contact_name: contactName,
       notes_general: notesGeneral,
       notes_reception: notesReception,
       notes_kitchen: notesKitchen,
@@ -628,6 +618,11 @@ export function ReservationModal({
                 </select>
               </label>
 
+              <label>
+                Guest contact name <span className="muted">(optional)</span>
+                <input value={contactName} onChange={(e) => setContactName(e.target.value)} />
+              </label>
+
               <div className="field-row">
                 <label>
                   Ref. number
@@ -701,7 +696,13 @@ export function ReservationModal({
 
         <div className="modal-actions">
           {isEdit && (
-            <button type="button" className="danger" onClick={() => setConfirmingDelete(true)} disabled={submitting}>
+            <button
+              type="button"
+              className="danger"
+              onClick={() => setConfirmingDelete(true)}
+              disabled={submitting || (role === 'staff' && reservation!.unit === null)}
+              title={role === 'staff' && reservation!.unit === null ? 'Only an admin or owner can delete a reservation outright' : undefined}
+            >
               {reservation!.unit !== null ? 'Unassign' : 'Delete'}
             </button>
           )}

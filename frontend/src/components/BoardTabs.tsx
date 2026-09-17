@@ -7,6 +7,7 @@ const DRAG_THRESHOLD_PX = 5;
 interface Props {
   boards: Board[];
   selectedId: number | null;
+  canManage: boolean;
   onSelect: (board: Board) => void;
   onCreate: (name: string) => void;
   onDelete: (board: Board) => void;
@@ -14,7 +15,7 @@ interface Props {
   onReorder: (boards: Board[]) => void;
 }
 
-export function BoardTabs({ boards, selectedId, onSelect, onCreate, onDelete, onRename, onReorder }: Props) {
+export function BoardTabs({ boards, selectedId, canManage, onSelect, onCreate, onDelete, onRename, onReorder }: Props) {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [pendingDelete, setPendingDelete] = useState<Board | null>(null);
@@ -126,49 +127,56 @@ export function BoardTabs({ boards, selectedId, onSelect, onCreate, onDelete, on
               type="button"
               className="tab-label"
               onMouseDown={(e) => {
+                if (!canManage) return;
                 dragStartRef.current = { id: board.id, x: e.clientX, index, moved: false };
               }}
-              onDoubleClick={() => startRename(board)}
-              title="Drag to reorder, double-click to rename"
+              onClick={() => {
+                if (!canManage) onSelect(board);
+              }}
+              onDoubleClick={() => canManage && startRename(board)}
+              title={canManage ? 'Drag to reorder, double-click to rename' : undefined}
             >
               {board.name}
             </button>
           )}
-          <button
-            type="button"
-            className="tab-delete"
-            title="Delete board"
-            onClick={(e) => {
-              e.stopPropagation();
-              setPendingDelete(board);
-            }}
-          >
-            ×
-          </button>
+          {canManage && (
+            <button
+              type="button"
+              className="tab-delete"
+              title="Delete board"
+              onClick={(e) => {
+                e.stopPropagation();
+                setPendingDelete(board);
+              }}
+            >
+              ×
+            </button>
+          )}
         </div>
       ))}
 
-      {creating ? (
-        <input
-          autoFocus
-          className="tab-input"
-          value={name}
-          placeholder="Board name"
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') submitNewBoard();
-            if (e.key === 'Escape') {
-              setCreating(false);
-              setName('');
-            }
-          }}
-          onBlur={submitNewBoard}
-        />
-      ) : (
-        <button type="button" className="tab tab-add" onClick={() => setCreating(true)}>
-          + New board
-        </button>
-      )}
+      {canManage &&
+        (creating ? (
+          <input
+            autoFocus
+            className="tab-input"
+            value={name}
+            placeholder="Board name"
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') submitNewBoard();
+              if (e.key === 'Escape') {
+                setCreating(false);
+                setName('');
+              }
+            }}
+            onBlur={submitNewBoard}
+          />
+        ) : (
+          <button type="button" className="tab tab-add" onClick={() => setCreating(true)}>
+            + New board
+          </button>
+        ))}
 
       {pendingDelete && (
         <ConfirmDialog

@@ -1,9 +1,14 @@
 from datetime import date, timedelta
 
 from django.db.models import Q
+from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
+
+from accounts.models import Hotel, Membership
+from accounts.permissions import require_role
 
 from .models import Board, Reservation, Unit, reservation_overlaps
 from .serializers import BoardSerializer, ReservationSerializer, UnitSerializer
@@ -12,8 +17,26 @@ SEARCH_WINDOW_DAYS = 62
 
 
 class BoardViewSet(viewsets.ModelViewSet):
-    queryset = Board.objects.all()
     serializer_class = BoardSerializer
+
+    def get_queryset(self):
+        return Board.objects.filter(hotel__memberships__user=self.request.user).distinct()
+
+    def perform_create(self, serializer):
+        hotel_id = self.request.data.get('hotel')
+        if not hotel_id:
+            raise ValidationError({'hotel': 'This field is required.'})
+        hotel = get_object_or_404(Hotel, pk=hotel_id)
+        require_role(self.request.user, hotel, Membership.ROLE_ADMIN)
+        serializer.save(hotel=hotel)
+
+    def perform_update(self, serializer):
+        require_role(self.request.user, serializer.instance.hotel, Membership.ROLE_ADMIN)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        require_role(self.request.user, instance.hotel, Membership.ROLE_ADMIN)
+        instance.delete()
 
     @action(detail=False, methods=['post'])
     def reorder(self, request):
@@ -21,7 +44,10 @@ class BoardViewSet(viewsets.ModelViewSet):
         if not isinstance(ids, list):
             return Response({'order': 'Must be a list of board ids.'}, status=400)
 
-        boards = {b.id: b for b in Board.objects.filter(pk__in=ids)}
+        boards = {b.id: b for b in self.get_queryset().filter(pk__in=ids)}
+        for hotel_id in {b.hotel_id for b in boards.values()}:
+            require_role(request.user, Hotel.objects.get(pk=hotel_id), Membership.ROLE_ADMIN)
+
         updated = []
         for index, board_id in enumerate(ids):
             board = boards.get(board_id)
@@ -31,18 +57,32 @@ class BoardViewSet(viewsets.ModelViewSet):
             updated.append(board)
         Board.objects.bulk_update(updated, ['order'])
 
-        return Response(BoardSerializer(Board.objects.all(), many=True).data)
+        return Response(BoardSerializer(self.get_queryset(), many=True).data)
 
 
 class UnitViewSet(viewsets.ModelViewSet):
     serializer_class = UnitSerializer
 
     def get_queryset(self):
-        queryset = Unit.objects.all()
+        queryset = Unit.objects.filter(board__hotel__memberships__user=self.request.user).distinct()
         board_id = self.request.query_params.get('board')
         if board_id:
             queryset = queryset.filter(board_id=board_id)
         return queryset
+
+    def perform_create(self, serializer):
+        board = serializer.validated_data.get('board')
+        require_role(self.request.user, board.hotel, Membership.ROLE_ADMIN)
+        serializer.save()
+
+    def perform_update(self, serializer):
+        board = serializer.validated_data.get('board', serializer.instance.board)
+        require_role(self.request.user, board.hotel, Membership.ROLE_ADMIN)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        require_role(self.request.user, instance.board.hotel, Membership.ROLE_ADMIN)
+        instance.delete()
 
     @action(detail=False, methods=['post'])
     def reorder(self, request):
@@ -50,6 +90,9 @@ class UnitViewSet(viewsets.ModelViewSet):
         ids = request.data.get('order')
         if not board_id or not isinstance(ids, list):
             return Response({'order': 'board and a list of unit ids are required.'}, status=400)
+
+        board = get_object_or_404(Board, pk=board_id)
+        require_role(request.user, board.hotel, Membership.ROLE_ADMIN)
 
         units = {u.id: u for u in Unit.objects.filter(pk__in=ids, board_id=board_id)}
         updated = []
@@ -68,7 +111,12 @@ class ReservationViewSet(viewsets.ModelViewSet):
     serializer_class = ReservationSerializer
 
     def get_queryset(self):
-        queryset = Reservation.objects.select_related('unit').prefetch_related('guests').all()
+        queryset = (
+            Reservation.objects.filter(board__hotel__memberships__user=self.request.user)
+            .distinct()
+            .select_related('unit')
+            .prefetch_related('guests')
+        )
 
         board_id = self.request.query_params.get('board')
         if board_id:
@@ -104,9 +152,27 @@ class ReservationViewSet(viewsets.ModelViewSet):
 
         return queryset
 
+    def perform_create(self, serializer):
+        board = serializer.validated_data.get('board')
+        require_role(self.request.user, board.hotel, Membership.ROLE_STAFF)
+        serializer.save()
+
+    def perform_update(self, serializer):
+        board = serializer.validated_data.get('board', serializer.instance.board)
+        require_role(self.request.user, board.hotel, Membership.ROLE_STAFF)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        # Staff may only ever unassign (a PATCH, handled by perform_update)
+        # -- a real hard delete needs at least admin.
+        require_role(self.request.user, instance.board.hotel, Membership.ROLE_ADMIN)
+        instance.delete()
+
     @action(detail=True, methods=['post'])
     def link_board(self, request, pk=None):
         reservation = self.get_object()
+        require_role(request.user, reservation.board.hotel, Membership.ROLE_STAFF)
+
         board_id = request.data.get('board')
         unit_id = request.data.get('unit')
         if not board_id:
@@ -119,6 +185,9 @@ class ReservationViewSet(viewsets.ModelViewSet):
         try:
             target_board = Board.objects.get(pk=board_id)
         except Board.DoesNotExist:
+            return Response({'board': 'Board not found.'}, status=404)
+
+        if target_board.hotel_id != reservation.board.hotel_id:
             return Response({'board': 'Board not found.'}, status=404)
 
         target_unit = None
@@ -157,6 +226,8 @@ class ReservationViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def unlink(self, request, pk=None):
         reservation = self.get_object()
+        require_role(request.user, reservation.board.hotel, Membership.ROLE_STAFF)
+
         linked_id = request.data.get('reservation_id')
         try:
             linked = reservation.linked_reservations.get(pk=linked_id)

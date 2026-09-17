@@ -30,6 +30,7 @@ def reservation_overlaps(unit_id, board, date_from, date_to, check_in_time, chec
 
 
 class Board(models.Model):
+    hotel = models.ForeignKey('accounts.Hotel', on_delete=models.CASCADE, related_name='boards')
     name = models.CharField(max_length=100)
     order = models.PositiveIntegerField(default=0)
     default_check_in_time = models.TimeField(default=time(14, 0))
@@ -79,6 +80,7 @@ class Reservation(models.Model):
     check_out_time = models.TimeField(null=True, blank=True)
     ref_number = models.CharField(max_length=100, blank=True)
     agency = models.CharField(max_length=100, blank=True)
+    contact_name = models.CharField(max_length=150, blank=True)
     notes_general = models.TextField(blank=True)
     notes_reception = models.TextField(blank=True)
     notes_kitchen = models.TextField(blank=True)
